@@ -144,3 +144,21 @@ class systematic_shift(redshift_distribution):
     def pz_fn(self, z):
         parent_pz, bias = self.params[:2]
         return parent_pz.pz_fn(np.clip(z - bias, 0))
+
+@register_pytree_node_class
+class interp_nz(redshift_distribution):
+    """Defines a smail distribution with these arguments
+    Parameters:
+    -----------
+    a:
+
+    b:
+
+    z0:
+
+    gals_per_arcmin2: number of galaxies per sq arcmin
+    """
+
+    def pz_fn(self, z):
+        z_data, nz_data = self.params
+        return np.interp(z, z_data, nz_data)

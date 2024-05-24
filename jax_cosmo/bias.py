@@ -56,3 +56,20 @@ class des_y1_ia_bias(container):
     def __call__(self, cosmo, z):
         A, eta, z0 = self.params
         return A * ((1.0 + z) / (1.0 + z0)) ** eta
+
+@register_pytree_node_class
+class hsc_y3_ia_bias(container):
+    """
+    arXiv:2304.00702 Eq. 20-21
+
+    Parameters:
+    -----------
+    cosmo: cosmology
+    A: amplitude
+    eta: redshift dependent slope
+    z0: pivot redshift (0.62)
+    """
+
+    def __call__(self, cosmo, z):
+        A, eta, z0 = self.params
+        return A * ((1.0 + z) / (1.0 + z0)) ** eta

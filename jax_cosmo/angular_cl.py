@@ -49,6 +49,76 @@ def _get_cov_blocks_ordering(probes):
     return cov_blocks
 
 
+
+def angular_cl_emu(cosmo, ell, probes, Pk, ks, zs):
+    """
+    Computes angular Cls for the provided probes
+
+    All using the Limber approximation
+
+    Pk: [nz, nk], in unit of Mpc^3
+    ks: [nk], in unit of 1/Mpc
+    zs: [nz]
+
+    zs is uniformly spaced
+
+    Returns
+    -------
+
+    cls: [ell, ncls]
+    """
+    # Retrieve the maximum redshift probed
+    # zmax = max([p.zmax for p in probes])
+    # print('zmax', zmax)
+    # precompute P(k) on a set of a's
+
+    # We define a function that computes a single l, and vectorize it
+    @partial(vmap, out_axes=1)
+    def cl(ell):
+        def integrand(zs):
+            # chi is 1D array of shape [na]
+            a = z2a(zs)
+
+            # Step 1: retrieve the associated comoving distance
+            chi = bkgrd.radial_comoving_distance(cosmo, a)
+
+            # Step 2: get the power spectrum for this combination of chi and a
+            # k is 1D array of shape [na], in Mpc-1
+            k = (ell + 0.5) / jnp.clip(chi, 1.0)
+
+            # pk - compute by interpolating one k value for each redshift, shape [na] (same length as zs)
+            pk = interp_lin_vmap(k*cosmo.h, ks, Pk*cosmo.h**3) # this computation requires units in h-3Mpc3 vs. hMpc-1
+            # pk = interp_lin_vmap(k, ks/cosmo.h, Pk*cosmo.h**3) # this computation requires units in h-3Mpc3 vs. hMpc-1
+
+            # Compute the kernels for all probes
+            kernels = jnp.vstack([p.kernel(cosmo, zs, ell) for p in probes])
+
+            # Define an ordering for the blocks of the signal vector
+            cl_index = jnp.array(_get_cl_ordering(probes))
+
+            # Compute all combinations of tracers
+            def combine_kernels(inds):
+                return kernels[inds[0]] * kernels[inds[1]]
+
+            # Now kernels has shape [ncls, na]
+            kernels = lax.map(combine_kernels, cl_index)
+
+            # integrating over uniform z
+            # since integrand does not have sign from ordering, so need to take absolute value.
+            daoverdz = (
+                -1 * -1 / ((1 + zs) ** 2)
+            )  
+            result = pk * kernels / jnp.clip(chi**2, 1.0) * bkgrd.dchioverda(cosmo, a) * daoverdz
+
+            # We transpose the result just to make sure that na is first
+            return result.T
+
+        # TODO: check zmax where it comes from, if thats a problem to assume the same zmax for all probes
+        return intg(integrand, zs) / const.c**2
+
+    return cl(ell)
+
+
 def angular_cl(
     cosmo, ell, probes, transfer_fn=tklib.Eisenstein_Hu, nonlinear_fn=power.halofit
 ):
